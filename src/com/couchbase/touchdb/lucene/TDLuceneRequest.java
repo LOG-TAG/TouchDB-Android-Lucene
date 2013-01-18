@@ -8,6 +8,7 @@ import org.codehaus.jackson.node.ObjectNode;
 public class TDLuceneRequest {
 
 	private String url;
+	private String function;
 	private ObjectNode data;
 	private Map<String, String> header = new HashMap<String, String>();
 	private Map<String, String> params = new HashMap<String, String>();
@@ -57,8 +58,16 @@ public class TDLuceneRequest {
 		return this.data;
 	}
 
-	public TDLuceneRequest setUrl(String url) {
-		this.url = url;
+	public TDLuceneRequest setUrl(String dbName, String function,
+			String ddocName, String index) {
+		if ("query".equals(function) || "info".equals(function)) {
+			this.url = String.format("/_local/%s/_design/%s/%s", dbName,
+					ddocName, index);
+		} else if ("optimize".equals(function) || "expunge".equals(function)) {
+			this.url = String.format("/_local/%s/_design/%s/%s/_%s", dbName,
+					ddocName, index, function);
+		}
+		this.function = function;
 		return this;
 	}
 
@@ -73,5 +82,14 @@ public class TDLuceneRequest {
 	 */
 	public String getRequestURI() {
 		return getUrl();
+	}
+
+	public TDLuceneRequest setFunction(String function) {
+		this.function = function;
+		return this;
+	}
+
+	public String getFunction() {
+		return function;
 	}
 }

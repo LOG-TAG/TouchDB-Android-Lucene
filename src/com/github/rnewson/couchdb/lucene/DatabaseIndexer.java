@@ -25,6 +25,7 @@ import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.document.MapFieldSelector;
 import org.apache.lucene.document.NumericField;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.IndexNotFoundException;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -44,6 +45,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.SingleInstanceLockFactory;
 import org.apache.lucene.util.ReaderUtil;
+import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.ObjectNode;
 import org.ektorp.CouchDbConnector;
@@ -300,7 +302,11 @@ public final class DatabaseIndexer implements Runnable {
 
 		if ("_optimize".equals(command)) {
 			Log.i(LOG_TAG, "Optimizing " + state);
-			state.writer.forceMerge(1, false);
+			Map<String, String> userData = IndexReader
+					.getCommitUserData(state.writer.getDirectory());
+			state.writer.forceMerge(1, true);
+			state.writer.commit(userData);
+			// Automatically removes unnecessary files
 			ServletUtils.setStatus(resp, 202);
 			ServletUtils.sendJsonSuccess(req, resp);
 			return;
@@ -324,14 +330,16 @@ public final class DatabaseIndexer implements Runnable {
 			return;
 		final IndexReader reader = state.borrowReader(isStaleOk(req));
 		try {
-			final JSONObject result = new JSONObject();
-			result.put("current", reader.isCurrent());
-			result.put("disk_size", Utils.directorySize(reader.directory()));
-			result.put("doc_count", reader.numDocs());
-			result.put("doc_del_count", reader.numDeletedDocs());
-			result.put("uuid", state.getUuid());
-			result.put("digest", state.getDigest());
-			final JSONArray fields = new JSONArray();
+			resp.put("current", reader.isCurrent());
+			resp.put("disk_size", Utils.directorySize(reader.directory()));
+			resp.put("doc_count", reader.numDocs());
+			resp.put("doc_del_count", reader.numDeletedDocs());
+			resp.put("uuid", state.getUuid().toString());
+			resp.put("digest", state.getDigest());
+			resp.put("update_seq",
+					getUpdateSequence(reader.getIndexCommit().getUserData())
+							.toString());
+			final ArrayNode fields = resp.putArray("fields");
 			final Iterator<FieldInfo> it = ReaderUtil.getMergedFieldInfos(
 					reader).iterator();
 			while (it.hasNext()) {
@@ -340,18 +348,21 @@ public final class DatabaseIndexer implements Runnable {
 					continue;
 				}
 				if (fieldInfo.isIndexed) {
-					fields.put(fieldInfo.name);
+					fields.add(fieldInfo.name);
 				}
 			}
-			result.put("fields", fields);
-			result.put("last_modified",
-					Long.toString(IndexReader.lastModified(reader.directory())));
-			result.put("optimized", reader.isOptimized());
-			result.put("ref_count", reader.getRefCount());
+			// resp.put("fields", fields);
 
-			final JSONObject info = new JSONObject();
-			info.put("code", 200);
-			info.put("json", result);
+			try {
+				resp.put("last_modified", Long.toString(IndexReader
+						.lastModified(reader.directory())));
+				resp.put("optimized", reader.isOptimized());
+				resp.put("ref_count", reader.getRefCount());
+			} catch (IndexNotFoundException e) {
+				// e.printStackTrace();
+			}
+
+			ServletUtils.setStatus(resp, 202);
 
 			ServletUtils.setResponseContentTypeAndEncoding(req, resp);
 			// final Writer writer = resp.getWriter();
@@ -378,6 +389,10 @@ public final class DatabaseIndexer implements Runnable {
 			return;
 		}
 
+		//updateIndexes();
+	}
+
+	public void updateIndexes() {
 		Thread changesFeed = new Thread(new Runnable() {
 
 			@Override
@@ -763,7 +778,7 @@ public final class DatabaseIndexer implements Runnable {
 		return result != null ? Integer.parseInt(result) : defaultValue;
 	}
 
-	private IndexState getState(TDLuceneRequest req, ObjectNode resp)
+	public IndexState getState(TDLuceneRequest req, ObjectNode resp)
 			throws IOException, JSONException {
 		final View view = paths.get(toPath(req));
 		if (view == null) {
@@ -827,8 +842,10 @@ public final class DatabaseIndexer implements Runnable {
 					since = seq.isEarlierThan(since) ? seq : since;
 					Log.d(LOG_TAG, dir + " bumped since to " + since);
 
+					// Setting a new context every time
+					Context localContext = Context.enter();
 					final DocumentConverter converter = new DocumentConverter(
-							context, view);
+							localContext, view);
 					final IndexWriter writer = newWriter(dir);
 
 					final IndexState state = new IndexState(converter, writer,

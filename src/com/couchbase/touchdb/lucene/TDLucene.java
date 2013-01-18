@@ -74,7 +74,7 @@ public class TDLucene {
 		return getIndexer(database);
 	}
 
-	public void fetch(TDLuceneRequest req, Callback callback)
+	public void process(TDLuceneRequest req, Callback callback)
 			throws IOException, JSONException {
 		TDLuceneAsync async = new TDLuceneAsync(callback);
 		async.execute(req);
@@ -84,6 +84,7 @@ public class TDLucene {
 			AsyncTask<TDLuceneRequest, Integer, Object> {
 
 		private Callback callback;
+		private String error;
 
 		public TDLuceneAsync(Callback callback) {
 			this.callback = callback;
@@ -94,20 +95,36 @@ public class TDLucene {
 
 			TDLuceneRequest req = params[0];
 			try {
-
 				DatabaseIndexer indexer = getIndexer(req);
 				ObjectNode resp = JsonNodeFactory.instance.objectNode();
+
 				if (indexer == null) {
 					ServletUtils.sendJsonError(req, resp, 500,
 							"error_creating_index");
 					return new JSONObject(resp.toString());
-				} else {
+				}
+
+				if (!"ok".equals(req.getParamAsString("stale"))) {
+					indexer.updateIndexes();
+				}
+
+				if ("query".equals(req.getFunction())) {
 					String json = indexer.search(req);
 					return new JSONObject(json);
+				} else if ("info".equals(req.getFunction())) {
+					indexer.info(req, resp);
+					return new JSONObject(resp.toString());
+				} else if ("optimize".equals(req.getFunction())
+						|| "expunge".equals(req.getFunction())) {
+					indexer.admin(req, resp);
+					return new JSONObject(resp.toString());
 				}
+
 			} catch (IOException e) {
+				error = e.getLocalizedMessage();
 				e.printStackTrace();
 			} catch (JSONException e) {
+				error = e.getLocalizedMessage();
 				e.printStackTrace();
 			}
 
@@ -117,8 +134,12 @@ public class TDLucene {
 		@Override
 		protected void onPostExecute(Object result) {
 
-			if (result != null && callback != null) {
-				callback.onSucess(result);
+			if (callback != null) {
+				if (result != null) {
+					callback.onSucess(result);
+				} else {
+					callback.onError(error);
+				}
 			}
 		}
 	}

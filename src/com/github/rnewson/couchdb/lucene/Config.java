@@ -20,7 +20,7 @@ public final class Config {
 	// private static final String LUCENE_DIR = "lucene.dir";
 	private static final String DEFAULT_DIR = "indexes";
 
-	public static final boolean allowLeadingWildcard = false;
+	public static final boolean allowLeadingWildcard = true;
 	public static final boolean lowercaseExpandedTerms = true;
 
 	public static final long commitEvery = 15;
@@ -31,7 +31,7 @@ public final class Config {
 
 	public static final double ramBufferSizeMB = IndexWriterConfig.DEFAULT_RAM_BUFFER_SIZE_MB;
 
-	public static final long timeout = 50000;
+	public static final long timeout = 120000;
 
 	public static final int limit = 25;
 

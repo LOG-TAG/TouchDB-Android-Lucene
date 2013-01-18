@@ -90,14 +90,16 @@ public final class DocumentConverter {
 			throws IOException, ParseException, JSONException {
 		final Object result;
 		final Scriptable scriptable = convertObject(doc.asJson());
-
+		
+		Context localContext = Context.enter();
 		try {
-			result = viewFun.call(context, scope, null,
+			result = viewFun.call(localContext, scope, null,
 					new Object[] { scriptable });
 		} catch (final JavaScriptException e) {
 			Log.w(LOG_TAG, doc + " caused exception during conversion.", e);
 			return NO_DOCUMENTS;
 		}
+		localContext.exit();
 
 		if (result == null || result instanceof Undefined) {
 			return NO_DOCUMENTS;

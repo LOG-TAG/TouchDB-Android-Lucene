@@ -31,7 +31,8 @@ public abstract class UpdateSequence {
 		private final String since;
 		private final Map<String, Long> vector = new HashMap<String, Long>();
 
-		private BigCouchUpdateSequence(final String encodedVector, final String packedSeqs) {
+		private BigCouchUpdateSequence(final String encodedVector,
+				final String packedSeqs) {
 			this.since = encodedVector;
 
 			final byte[] bytes = new Base64(true).decode(packedSeqs);
@@ -39,21 +40,24 @@ public abstract class UpdateSequence {
 			try {
 				final OtpErlangList list = (OtpErlangList) stream.read_any();
 				for (int i = 0, arity = list.arity(); i < arity; i++) {
-					final OtpErlangTuple tuple = (OtpErlangTuple) list.elementAt(i);
+					final OtpErlangTuple tuple = (OtpErlangTuple) list
+							.elementAt(i);
 					final OtpErlangObject node = tuple.elementAt(0);
 					final OtpErlangObject range = tuple.elementAt(1);
-					final OtpErlangLong node_seq = (OtpErlangLong) tuple.elementAt(2);
+					final OtpErlangLong node_seq = (OtpErlangLong) tuple
+							.elementAt(2);
 					vector.put(node + "-" + range, node_seq.longValue());
 				}
 			} catch (final OtpErlangDecodeException e) {
-				throw new IllegalArgumentException(encodedVector + " not valid.");
+				throw new IllegalArgumentException(encodedVector
+						+ " not valid.");
 			}
 		}
 
 		@Override
 		public String appendSince(final String url) {
 			try {
-				return url + "&since=" + URLEncoder.encode(since,  "US-ASCII");
+				return url + "&since=" + URLEncoder.encode(since, "US-ASCII");
 			} catch (UnsupportedEncodingException e) {
 				throw new Error("US-ASCII inexplicably missing.");
 			}
@@ -67,10 +71,12 @@ public abstract class UpdateSequence {
 
 			if (other instanceof BigCouchUpdateSequence) {
 				final BigCouchUpdateSequence otherBigCouch = (BigCouchUpdateSequence) other;
-				final Iterator<Entry<String, Long>> it = this.vector.entrySet().iterator();
+				final Iterator<Entry<String, Long>> it = this.vector.entrySet()
+						.iterator();
 				while (it.hasNext()) {
 					final Entry<String, Long> entry = it.next();
-					final Long otherValue = otherBigCouch.vector.get(entry.getKey());
+					final Long otherValue = otherBigCouch.vector.get(entry
+							.getKey());
 					if (otherValue != null && entry.getValue() < otherValue) {
 						return true;
 					}
@@ -89,10 +95,12 @@ public abstract class UpdateSequence {
 
 			if (other instanceof BigCouchUpdateSequence) {
 				final BigCouchUpdateSequence otherBigCouch = (BigCouchUpdateSequence) other;
-				final Iterator<Entry<String, Long>> it = this.vector.entrySet().iterator();
+				final Iterator<Entry<String, Long>> it = this.vector.entrySet()
+						.iterator();
 				while (it.hasNext()) {
 					final Entry<String, Long> entry = it.next();
-					final Long otherValue = otherBigCouch.vector.get(entry.getKey());
+					final Long otherValue = otherBigCouch.vector.get(entry
+							.getKey());
 					if (otherValue != null && entry.getValue() > otherValue) {
 						return true;
 					}
@@ -163,6 +171,9 @@ public abstract class UpdateSequence {
 
 		@Override
 		public boolean isEarlierThan(final UpdateSequence other) {
+			// if ("0".equals(other.toString())) {
+			// return false;
+			// }
 			return true;
 		}
 
@@ -181,7 +192,8 @@ public abstract class UpdateSequence {
 	public static final UpdateSequence START = new StartOfUpdateSequence();
 
 	private static Pattern BC3 = Pattern.compile("[0-9]+-([0-9a-zA-Z_-]+)");
-	private static Pattern BC4 = Pattern.compile("\\[[0-9]+\\s*,\\s*\"([0-9a-zA-Z_-]+)\"\\]");
+	private static Pattern BC4 = Pattern
+			.compile("\\[[0-9]+\\s*,\\s*\"([0-9a-zA-Z_-]+)\"\\]");
 
 	public static UpdateSequence parseUpdateSequence(final String str) {
 		if (str.matches("[0-9]+")) {
