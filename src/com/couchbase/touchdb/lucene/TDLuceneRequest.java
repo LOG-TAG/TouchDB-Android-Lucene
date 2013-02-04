@@ -12,6 +12,7 @@ public class TDLuceneRequest {
 	private ObjectNode data;
 	private Map<String, String> header = new HashMap<String, String>();
 	private Map<String, String> params = new HashMap<String, String>();
+	private String dbName;
 
 	public TDLuceneRequest() {
 
@@ -67,6 +68,7 @@ public class TDLuceneRequest {
 			this.url = String.format("/_local/%s/_design/%s/%s/_%s", dbName,
 					ddocName, index, function);
 		}
+		this.setDbName(dbName);
 		this.function = function;
 		return this;
 	}
@@ -91,5 +93,14 @@ public class TDLuceneRequest {
 
 	public String getFunction() {
 		return function;
+	}
+
+	public TDLuceneRequest setDbName(String dbName) {
+		this.dbName = dbName;
+		return this;
+	}
+
+	public String getDbName() {
+		return dbName;
 	}
 }

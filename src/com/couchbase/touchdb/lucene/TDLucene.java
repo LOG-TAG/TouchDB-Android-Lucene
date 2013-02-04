@@ -10,7 +10,11 @@ import org.codehaus.jackson.node.ObjectNode;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.app.Activity;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
+import android.util.Log;
 
 import com.couchbase.touchdb.TDServer;
 import com.couchbase.touchdb.ektorp.TouchDBHttpClient;
@@ -23,6 +27,8 @@ import com.github.rnewson.couchdb.lucene.couchdb.Database;
 import com.github.rnewson.couchdb.lucene.util.ServletUtils;
 
 public class TDLucene {
+
+	private static String LOG_TAG = "TDLUCENE";
 
 	static {
 		TDURLStreamHandlerFactory.registerSelfIgnoreError();
@@ -74,9 +80,9 @@ public class TDLucene {
 		return getIndexer(database);
 	}
 
-	public void process(TDLuceneRequest req, Callback callback)
+	public void process(Context mContext, TDLuceneRequest req, Callback callback)
 			throws IOException, JSONException {
-		TDLuceneAsync async = new TDLuceneAsync(callback);
+		TDLuceneAsync async = new TDLuceneAsync(mContext, callback);
 		async.execute(req);
 	}
 
@@ -85,39 +91,63 @@ public class TDLucene {
 
 		private Callback callback;
 		private String error;
+		private Context mContext;
 
-		public TDLuceneAsync(Callback callback) {
+		public TDLuceneAsync(Context mContext, Callback callback) {
 			this.callback = callback;
+			this.mContext = mContext;
 		}
 
 		@Override
 		protected Object doInBackground(TDLuceneRequest... params) {
-
+			
+		
 			TDLuceneRequest req = params[0];
+			
+			Log.d(LOG_TAG,"Received a request: " + req.getUrl());
+			
 			try {
-				DatabaseIndexer indexer = getIndexer(req);
+				// TODO Make this work for multiple dbs
 				ObjectNode resp = JsonNodeFactory.instance.objectNode();
 
-				if (indexer == null) {
-					ServletUtils.sendJsonError(req, resp, 500,
-							"error_creating_index");
-					return new JSONObject(resp.toString());
-				}
+				if (indexingNow(mContext)) {
+					Log.d(LOG_TAG,"Indexing at the moment");
+					
+					// If we are indexing, we can get the status of the index
+					if ("info".equals(req.getFunction())) {
+						resp.put("update_seq", indexingState(mContext));
+						return new JSONObject(resp.toString());
+					} else {
+						error = "Sorry, I am still indexing";
+						return null;
+					}
+				} else {
+					
+					Log.d(LOG_TAG,"Not indexing at the moment");
 
-				if (!"ok".equals(req.getParamAsString("stale"))) {
-					indexer.updateIndexes();
-				}
+					DatabaseIndexer indexer = getIndexer(req);
 
-				if ("query".equals(req.getFunction())) {
-					String json = indexer.search(req);
-					return new JSONObject(json);
-				} else if ("info".equals(req.getFunction())) {
-					indexer.info(req, resp);
-					return new JSONObject(resp.toString());
-				} else if ("optimize".equals(req.getFunction())
-						|| "expunge".equals(req.getFunction())) {
-					indexer.admin(req, resp);
-					return new JSONObject(resp.toString());
+					if (indexer == null) {
+						ServletUtils.sendJsonError(req, resp, 500,
+								"error_creating_index");
+						return new JSONObject(resp.toString());
+					}
+
+					if (!"ok".equals(req.getParamAsString("stale"))) {
+						indexer.updateIndexes(this.mContext);
+					}
+
+					if ("query".equals(req.getFunction())) {
+						String json = indexer.search(req);
+						return new JSONObject(json);
+					} else if ("info".equals(req.getFunction())) {
+						indexer.info(req, resp);
+						return new JSONObject(resp.toString());
+					} else if ("optimize".equals(req.getFunction())
+							|| "expunge".equals(req.getFunction())) {
+						indexer.admin(req, resp);
+						return new JSONObject(resp.toString());
+					}
 				}
 
 			} catch (IOException e) {
@@ -142,6 +172,20 @@ public class TDLucene {
 				}
 			}
 		}
+	}
+
+	public static boolean indexingNow(android.content.Context mContext) {
+		final SharedPreferences prefs = mContext.getSharedPreferences("lucene",
+				Activity.MODE_WORLD_READABLE);
+		return prefs.getBoolean("indexing", false)
+				&& (System.currentTimeMillis() - prefs.getLong("indexing_time",
+						0)) < 2 * 60 * 1000;
+	}
+
+	public static String indexingState(android.content.Context mContext) {
+		final SharedPreferences prefs = mContext.getSharedPreferences("lucene",
+				Activity.MODE_WORLD_READABLE);
+		return prefs.getString("index_at", "0");
 	}
 
 	public static abstract class Callback {

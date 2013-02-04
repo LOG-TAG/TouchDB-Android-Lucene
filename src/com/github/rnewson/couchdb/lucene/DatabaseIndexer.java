@@ -60,9 +60,12 @@ import org.json.JSONObject;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
 
+import android.app.Activity;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import com.couchbase.touchdb.ektorp.TouchDBHttpClient;
+import com.couchbase.touchdb.lucene.TDLucene;
 import com.couchbase.touchdb.lucene.TDLuceneRequest;
 import com.github.rnewson.couchdb.lucene.couchdb.CouchDocument;
 import com.github.rnewson.couchdb.lucene.couchdb.Database;
@@ -389,10 +392,13 @@ public final class DatabaseIndexer implements Runnable {
 			return;
 		}
 
-		//updateIndexes();
+		// updateIndexes();
 	}
 
-	public void updateIndexes() {
+	public void updateIndexes(android.content.Context mContext) {
+		final SharedPreferences prefs = mContext.getSharedPreferences("lucene",
+				Activity.MODE_WORLD_READABLE);
+
 		Thread changesFeed = new Thread(new Runnable() {
 
 			@Override
@@ -403,82 +409,130 @@ public final class DatabaseIndexer implements Runnable {
 					String s = "start".equals(since.toString()) ? "0" : since
 							.toString();
 					ChangesCommand changesCommand = new ChangesCommand.Builder()
-							.includeDocs(true).since(s).build();
+							.includeDocs(true).since(s).continuous(false)
+							.build();
 
 					List<DocumentChange> changes = stdCouchDBConnector
 							.changes(changesCommand);
-					for (DocumentChange docChange : changes) {
+					int counter = 0;
 
-						JSONObject json;
+					// Only if there are some changes
+					if (changes.size() > 0) {
 
-						json = new JSONObject(docChange.getDoc());
+						prefs.edit().putBoolean("indexing", true).commit();
+						prefs.edit()
+								.putLong("indexing_time",
+										System.currentTimeMillis()).commit();
 
-						if (json.has("error")) {
-							Log.w(LOG_TAG, "Indexing stopping due to error: "
-									+ json);
-							return;
-						}
+						for (DocumentChange docChange : changes) {
 
-						if (json.has("last_seq")) {
-							Log.w(LOG_TAG, "End of changes detected.");
-							return;
-						}
+							JSONObject json;
 
-						final UpdateSequence seq = UpdateSequence
-								.parseUpdateSequence(""
-										+ docChange.getSequence());
-						// UpdateSequence.parseUpdateSequence(json.getString("seq"));
-						final String id = json.getString("_id");
-						CouchDocument doc = null;
-						// if (!json.isNull("doc")) {
-						doc = new CouchDocument(json); // .getJSONObject("doc")
-						// }
+							json = new JSONObject(docChange.getDoc());
 
-						if (id.startsWith("_design")) {
-							if (seq.isLaterThan(ddoc_seq)) {
-								Log.i(LOG_TAG,
-										"Exiting due to design document change.");
+							if (json.has("error")) {
+								Log.w(LOG_TAG,
+										"Indexing stopping due to error: "
+												+ json);
 								return;
 							}
-						}
 
-						if (doc.isDeleted()) {
-							for (final IndexState state : states.values()) {
-								state.writer
-										.deleteDocuments(new Term("_id", id));
-								state.setPendingSequence(seq);
-								state.readerDirty = true;
+							if (json.has("last_seq")) {
+								Log.w(LOG_TAG, "End of changes detected.");
+								return;
 							}
-						} else {
-							for (final Entry<View, IndexState> entry : states
-									.entrySet()) {
-								final View view = entry.getKey();
-								final IndexState state = entry.getValue();
 
-								if (seq.isLaterThan(state.pending_seq)) {
-									final Collection<Document> docs;
-									try {
-										docs = state.converter.convert(doc,
-												view.getDefaultSettings(),
-												database);
-									} catch (final Exception e) {
-										Log.w(LOG_TAG,
-												id + " caused "
-														+ e.getMessage());
-										return;
-									}
+							final UpdateSequence seq = UpdateSequence
+									.parseUpdateSequence(""
+											+ docChange.getSequence());
+							// UpdateSequence.parseUpdateSequence(json.getString("seq"));
+							final String id = json.getString("_id");
+							CouchDocument doc = null;
+							// if (!json.isNull("doc")) {
+							doc = new CouchDocument(json); // .getJSONObject("doc")
+							// }
 
-									state.writer.updateDocuments(new Term(
-											"_id", id), docs, view
-											.getAnalyzer());
+							if (id.startsWith("_design")) {
+								if (seq.isLaterThan(ddoc_seq)) {
+									Log.i(LOG_TAG,
+											"Exiting due to design document change.");
+									return;
+								}
+							}
+
+							if (doc.isDeleted()) {
+								for (final IndexState state : states.values()) {
+									state.writer.deleteDocuments(new Term(
+											"_id", id));
 									state.setPendingSequence(seq);
 									state.readerDirty = true;
 								}
+							} else {
+								for (final Entry<View, IndexState> entry : states
+										.entrySet()) {
+									final View view = entry.getKey();
+									final IndexState state = entry.getValue();
+
+									if (seq.isLaterThan(state.pending_seq)) {
+										final Collection<Document> docs;
+										try {
+											docs = state.converter.convert(doc,
+													view.getDefaultSettings(),
+													database);
+										} catch (final Exception e) {
+											Log.w(LOG_TAG,
+													id + " caused "
+															+ e.getMessage());
+											return;
+										}
+
+										state.writer.updateDocuments(new Term(
+												"_id", id), docs, view
+												.getAnalyzer());
+										state.setPendingSequence(seq);
+										state.readerDirty = true;
+									}
+								}
+							}
+
+							if (++counter % 50 == 0) {
+								commitAll();
+								prefs.edit()
+										.putString(
+												"index_at",
+												states.entrySet().iterator()
+														.next().getValue().pending_seq
+														.toString()).commit();
+								prefs.edit()
+										.putLong("indexing_time",
+												System.currentTimeMillis())
+										.commit();
 							}
 						}
+
+						commitAll();
+
+						prefs.edit()
+								.putString(
+										"index_at",
+										states.entrySet().iterator().next()
+												.getValue().pending_seq
+												.toString()).commit();
+
+						// TODO check for space and do it
+						// Lets not optimize the index
+						// for (String key : paths.keySet()) {
+						// View view = paths.get(key);
+						// IndexState state = states.get(view);
+						// Log.i(LOG_TAG, "Optimizing " + state);
+						// Map<String, String> userData = IndexReader
+						// .getCommitUserData(state.writer
+						// .getDirectory());
+						// state.writer.forceMerge(1, true);
+						// state.writer.commit(userData);
+						// }
 					}
 
-					commitAll();
 				} catch (IOException e) {
 					e.printStackTrace();
 				} catch (JSONException e) {
@@ -487,10 +541,14 @@ public final class DatabaseIndexer implements Runnable {
 					if (feed != null) {
 						feed.cancel();
 					}
+					prefs.edit().putBoolean("indexing", false).commit();
 				}
 			}
 		});
-		changesFeed.start();
+
+		if (!TDLucene.indexingNow(mContext)) {
+			changesFeed.start();
+		}
 	}
 
 	public String search(TDLuceneRequest req) throws IOException, JSONException {
