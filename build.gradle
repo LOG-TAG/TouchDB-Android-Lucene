@@ -1,0 +1,68 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            url "https://oss.sonatype.org/content/repositories/snapshots"
+        }
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:0.7.+'
+    }
+}
+
+apply plugin: 'android-library'
+apply plugin: 'maven'
+group = 'com.couchbase.touchdb.android.lucene'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    maven {
+        url "http://artoo-mvn-repo.s3.amazonaws.com/snapshots"
+    }
+    mavenCentral()
+}
+
+
+android {
+    compileSdkVersion 18
+    buildToolsVersion "18.0.1"
+
+    defaultConfig {
+        minSdkVersion 8
+        targetSdkVersion 18
+    }
+}
+
+dependencies {
+
+   // compile files('libs/lucene-core-3.6.0-sources.jar')
+    //compile files('libs/lucene-core-3.6.0.jar');
+    compile 'org.apache.lucene:lucene-highlighter:3.6.0'
+    //compile 'org.apache.lucene:lucene-memory:3.6.0'            
+    //compile 'org.apache.lucene:lucene-queries:3.6.0'
+    //compile 'org.apache.lucene:lucene-core:3.6.0'
+    compile 'org.apache.lucene:lucene-analyzers:3.6.2'
+    compile 'org.mozilla:rhino:1.7R4'
+    compile 'org.erlang.otp:jinterface:1.5.6'
+    compile 'commons-codec:commons-codec:1.7'
+    compile 'commons-lang:commons-lang:2.6'
+    compile 'org.apache.tika:tika-core:1.4'
+    //compile 'org.apache.tika:tika-parsers:1.4'
+    compile ('com.couchbase.touchdb.ektorp:TouchDB-Android-Ektorp:1.0-SNAPSHOT')
+}
+
+task wrapper(type: org.gradle.api.tasks.wrapper.Wrapper) {
+    gradleVersion = '1.9'
+}
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            repository(url: "file://mvn")
+            pom.project {
+                name 'ArtooAPI-Android'
+                packaging 'aar'
+            }
+        }
+    }
+}

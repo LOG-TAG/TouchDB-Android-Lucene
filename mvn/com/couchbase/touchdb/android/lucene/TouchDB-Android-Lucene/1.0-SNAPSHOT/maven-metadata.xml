@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>com.couchbase.touchdb.android.lucene</groupId>
+  <artifactId>TouchDB-Android-Lucene</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <versioning>
+    <snapshot>
+      <timestamp>20140110.095324</timestamp>
+      <buildNumber>1</buildNumber>
+    </snapshot>
+    <lastUpdated>20140110095324</lastUpdated>
+  </versioning>
+</metadata>
