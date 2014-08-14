@@ -6,7 +6,7 @@ buildscript {
         }
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:0.7.+'
+        classpath 'com.android.tools.build:gradle:0.12.+'
     }
 }
 
@@ -15,21 +15,31 @@ apply plugin: 'maven'
 group = 'com.couchbase.touchdb.android.lucene'
 version = '1.0-SNAPSHOT'
 
+configurations {
+    deployerAars
+    all*.exclude module: "org.osgi.foundation"
+}
+
 repositories {
+
     maven {
         url "http://artoo-mvn-repo.s3.amazonaws.com/snapshots"
+    }
+    maven {
+        url 'https://oss.sonatype.org/content/repositories/snapshots/'
     }
     mavenCentral()
 }
 
 
+
 android {
     compileSdkVersion 18
-    buildToolsVersion "18.0.1"
+    buildToolsVersion "19.1.0"
 
     defaultConfig {
-        minSdkVersion 8
-        targetSdkVersion 18
+        minSdkVersion 14
+        targetSdkVersion 14
     }
 }
 
@@ -49,20 +59,36 @@ dependencies {
     compile 'org.apache.tika:tika-core:1.4'
     //compile 'org.apache.tika:tika-parsers:1.4'
     compile ('com.couchbase.touchdb.ektorp:TouchDB-Android-Ektorp:1.0-SNAPSHOT')
+    deployerAars "org.springframework.build:aws-maven:4.8.0.RELEASE"
 }
 
 task wrapper(type: org.gradle.api.tasks.wrapper.Wrapper) {
-    gradleVersion = '1.9'
+    gradleVersion = '1.11'
 }
 
 uploadArchives {
     repositories {
-        mavenDeployer {
-            repository(url: "file://mvn")
-            pom.project {
-                name 'ArtooAPI-Android'
-                packaging 'aar'
+        mavenDeployer { deployer ->
+            configuration = configurations.deployerAars
+            repository(url: "s3://artoo-mvn-repo/snapshots"){ authentication(userName: 'AKIAJKVKV3SDD4N7JWVQ',
+                    passphrase: 'HcCTisrifeE9OaANgosP7x9fPLmnAyyJz3VVJAo0')
             }
+//            pom.project {
+//                name 'ArtooAPI-Android-DataCapture'
+//                packaging 'aar'
+//            }
         }
     }
 }
+
+// uploadArchives {
+//     repositories {
+//         mavenDeployer {
+//             repository(url: "file://mvn")
+//             pom.project {
+//                 name 'ArtooAPI-Android'
+//                 packaging 'aar'
+//             }
+//         }
+//     }
+// }
